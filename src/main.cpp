@@ -4,69 +4,17 @@
 
 #include "MainController.h"
 
-void printError(esp_err_t err) {
-    switch (err) {
-        case ESP_ERR_INVALID_ARG:
-            Serial.println("Invalid Argument");
-            break;
-        case ESP_ERR_TIMEOUT:
-            Serial.println("TX Queue Full (Timeout)");
-            break;
-        case ESP_FAIL:
-            Serial.println("TWAI Controller in Bus-Off or Stopped");
-            break;
-        case ESP_ERR_INVALID_STATE:
-            Serial.println("TWAI Driver Not Installed or Not Running");
-            break;
-        default:
-            Serial.printf("Unknown Error: 0x%X\n", err);
-            break;
-    }
-}
-
-void checkTwaiStatus() {
-    twai_status_info_t status;
-    twai_get_status_info(&status);
-
-    Serial.printf("TX Buffer: %d | RX Queue: %d | TX Error Counter: %d | RX Error Counter: %d\n",
-                  status.msgs_to_tx, status.msgs_to_rx, status.tx_error_counter, status.rx_error_counter);
-
-    Serial.printf("Bus State: ");
-    switch (status.state) {
-        case TWAI_STATE_STOPPED:
-            Serial.println("Stopped");
-            break;
-        case TWAI_STATE_RUNNING:
-            Serial.println("Running");
-            break;
-        case TWAI_STATE_BUS_OFF:
-            Serial.println("Bus-Off (Critical Error)");
-            break;
-        default:
-            Serial.println("Unknown State");
-            break;
-    }
-}
-
-void checkTwaiAlerts() {
-    uint32_t alerts;
-    if (twai_read_alerts(&alerts, pdMS_TO_TICKS(10)) == ESP_OK) {
-        Serial.print("TWAI Alerts: ");
-
-        if (alerts & TWAI_ALERT_TX_FAILED) Serial.print("[TX Failed] ");
-        if (alerts & TWAI_ALERT_TX_SUCCESS) Serial.print("[TX Success] ");
-        if (alerts & TWAI_ALERT_RX_QUEUE_FULL) Serial.print("[RX Queue Full] ");
-        if (alerts & TWAI_ALERT_BUS_ERROR) Serial.print("[Bus Error] ");
-        if (alerts & TWAI_ALERT_BUS_OFF) Serial.print("[Bus-Off] ");
-        if (alerts & TWAI_ALERT_RX_FIFO_OVERRUN) Serial.print("[RX FIFO Overrun] ");
-
-        Serial.println();
-    }
-}
+void checkTwaiAlerts();
+void checkTwaiStatus();
+void printError(esp_err_t err);
 
 bool TransmissionEnable = false;
 int player = 0;
 int battery = 0;
+
+twai_general_config_t g_config;
+twai_timing_config_t t_config;
+twai_filter_config_t f_config;
 
 unsigned long previousTime = millis();
 unsigned long controllerDataTimer = 0;
@@ -76,9 +24,9 @@ void setup() {
   Serial.begin(115200);
   
   // TWAI Configuration
-  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_22, TWAI_MODE_NO_ACK);
-  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+  g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_22, TWAI_MODE_NORMAL);
+  t_config = TWAI_TIMING_CONFIG_500KBITS();
+  f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
   g_config.alerts_enabled = TWAI_ALERT_ALL; 
 
   // Install TWAI driver
@@ -113,12 +61,12 @@ void loop() {
 	controllerDataTimer += dt;
 	controllerStatusTimer += dt;
 
-    if(Controller.isConnected == 1 && controllerDataTimer >= 200 && TransmissionEnable)
+    if(Controller.isConnected == 1 && controllerDataTimer >= 50 && TransmissionEnable)
     {
 
     	uint8_t* controllerData = Controller.getControllerData();
     	twai_message_t dataFrame = { 0 };
-    	dataFrame.identifier = 0x10; // Default OBD2 address;
+    	dataFrame.identifier = 0x10;
     	dataFrame.extd = 0;
     	dataFrame.data_length_code = 8;
     	dataFrame.data[0] = controllerData[0];
@@ -162,13 +110,94 @@ void loop() {
         Serial.print("Received ID: 0x"); Serial.println(RX_Frame.identifier, HEX);
 
       // Check for specific message (ID = 0x123, first byte = 0xAA)
-      if (RX_Frame.identifier == 0x123 && RX_Frame.data[0] == 0xAA)
-          Serial.println("Specific Message Received!");
-      else
-          Serial.println("Message does not match criteria.");
+      if (RX_Frame.identifier == 0x19 && RX_Frame.data[0] && 0x01)
+      {
+          Serial.println("Global Transmission enable");
+          TransmissionEnable = true;
+      }   
     }
-    else
+
+    checkTwaiStatus();
+
+}
+
+
+void printError(esp_err_t err) {
+    switch (err) {
+        case ESP_ERR_INVALID_ARG:
+            Serial.println("Invalid Argument");
+            break;
+        case ESP_ERR_TIMEOUT:
+            Serial.println("TX Queue Full (Timeout)");
+            break;
+        case ESP_FAIL:
+            Serial.println("TWAI Controller in Bus-Off or Stopped");
+            break;
+        case ESP_ERR_INVALID_STATE:
+            Serial.println("TWAI Driver Not Installed or Not Running");
+            break;
+        default:
+            Serial.printf("Unknown Error: 0x%X\n", err);
+            break;
+    }
+}
+
+void checkTwaiStatus() {
+    twai_status_info_t status;
+    twai_get_status_info(&status);
+
+    //Serial.printf("TX Buffer: %d | RX Queue: %d | TX Error Counter: %d | RX Error Counter: %d\n",
+    //              status.msgs_to_tx, status.msgs_to_rx, status.tx_error_counter, status.rx_error_counter);
+
+    if(status.tx_error_counter > 10)
+      Serial.printf("TX Error Counter: %d", status.tx_error_counter);
+    if(status.rx_error_counter > 10)
+      Serial.printf("RX Error Counter: %d", status.rx_error_counter);
+
+    if(status.tx_error_counter > 30)
     {
-        Serial.println("No message received.");
+      Serial.printf("[CRITICAL] TX Error - Stopping transmission %d", status.tx_error_counter);
+      TransmissionEnable = false;
+      twai_stop();
+      twai_driver_uninstall();
+      delay(100);  // Small delay before reinitializing
+
+      twai_driver_install(&g_config, &t_config, &f_config);
+      twai_start();
+      Serial.println("TWAI restarted.");
+    }
+    if(status.rx_error_counter > 30)
+      Serial.printf("RX Error Counter: %d", status.rx_error_counter);
+
+    //Serial.printf("Bus State: ");
+    switch (status.state) {
+        case TWAI_STATE_STOPPED:
+            Serial.println("Stopped");
+            break;
+        case TWAI_STATE_RUNNING:
+            //Serial.println("Running");
+            break;
+        case TWAI_STATE_BUS_OFF:
+            Serial.println("Bus-Off (Critical Error)");
+            break;
+        default:
+            Serial.println("Unknown State");
+            break;
+    }
+}
+
+void checkTwaiAlerts() {
+    uint32_t alerts;
+    if (twai_read_alerts(&alerts, pdMS_TO_TICKS(10)) == ESP_OK) {
+        Serial.print("TWAI Alerts: ");
+
+        if (alerts & TWAI_ALERT_TX_FAILED) Serial.print("[TX Failed] ");
+        if (alerts & TWAI_ALERT_TX_SUCCESS) Serial.print("[TX Success] ");
+        if (alerts & TWAI_ALERT_RX_QUEUE_FULL) Serial.print("[RX Queue Full] ");
+        if (alerts & TWAI_ALERT_BUS_ERROR) Serial.print("[Bus Error] ");
+        if (alerts & TWAI_ALERT_BUS_OFF) Serial.print("[Bus-Off] ");
+        if (alerts & TWAI_ALERT_RX_FIFO_OVERRUN) Serial.print("[RX FIFO Overrun] ");
+
+        Serial.println();
     }
 }
