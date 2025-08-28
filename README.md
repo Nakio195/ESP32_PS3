@@ -1,4 +1,4 @@
-# [board] Controller example#
+# [board] Controller example #
 This simple example implements the communication of an ESP32 controlled by a PS3 Controller with th [board] CAN interface.
 It sends multiples commands that allow the control of the steering, the motors, lights, and sounds.
 
