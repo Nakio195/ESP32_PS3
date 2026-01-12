@@ -9,64 +9,58 @@
 #define MAINCONTROLLER_H_
 
 #include "Arduino.h"
+#include "AMT232.h"
 
-#define STICK_DEADZONE 10
+#define THROTTLE_PIN 15
+#define AN_BRAKE_PIN 2
 
+#define BRAKE_PIN 0
+#define PARKBRAKE_PIN 16
+#define TURNLIGHT_L_PIN 34
+#define TURNLIGHT_R_PIN 35
+#define LIGHT_PIN 4
+#define WARNLIGHT_PIN 17
+#define HORN_PIN 23
+#define REVERSE_PIN 14
+
+#define STICK_DEADZONE 2
+
+enum {DATA_THROTTLE=0, DATA_BRAKE=1, DATA_STEERING_H=2, DATA_STEERING_L=3, DATA_FLAGS=4};
+
+struct ControllerData
+{
+        //Analog inputs
+		uint16_t Throttle; 
+		uint16_t Brake; 
+		int16_t Steering;
+        int16_t rawSteering;
+		
+		// Digital inputs
+		bool ParkBrake;
+		bool BrakeSwitch;
+		bool TurnLight_L;
+		bool TurnLight_R;
+		bool WarnLight;
+		bool Light;
+		bool Horn;
+        bool Reverse;
+};
 
 class MainController {
 	public:
 		MainController();
 		virtual ~MainController();
-		static void update();
-		static void onConnect();
-		static void onDisconnect();
-		uint8_t* getControllerData();
+		void update();
+		ControllerData getControllerData();
 		uint8_t* getControllerStatus();
 
-
-
 	public:
-		enum BatteryLevels{Undefined, Shutdown, Dying, Low, High, Full, Charging};
-		//Analog stick
-		int8_t	L_Stick_x;
-		int8_t	L_Stick_y;
-		int8_t	R_Stick_x;
-		int8_t	R_Stick_y;
-		// Analog Triggers
-		int8_t L2_Trigger;
-		int8_t R2_Trigger;
-		// Symbols buttons
-		bool Cross;
-		bool Square;
-		bool Triangle;
-		bool Circle;
-		// DPAD buttons
-		bool DPAD_L;
-		bool DPAD_U;
-		bool DPAD_R;
-		bool DPAD_D;
-		//LR Buttons
-		bool L1;
-		bool R1;
-		bool L3;
-		bool R3;
-		// Control buttons
-		bool Start;
-		bool Select;
-		bool PlayStation;
-		//Status information
-		bool isConnected;
-		uint8_t BatteryLevel;
-		uint8_t LedControl;
+	
+        ControllerData Data;
 
-		// Analog DeadZones
-		bool L_AnalogDeadZone;
-		bool R_AnalogDeadZone;
-		bool L_TriggerDeadZone;
-		bool R_TriggerDeadZone;
-
-	private:
-		uint8_t ControllerData[8];
+        AMT232 SteeringEncoder;
+    
+    private:
 		uint8_t ControllerStatus[6];
 };
 
