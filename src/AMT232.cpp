@@ -28,13 +28,14 @@ uint16_t AMT232::read(uint8_t pin, bool* error)
 	rx = (int16_t)SPI.transfer16(txDummy);
     digitalWrite(pin, HIGH);
 
-	Data = int16_t(rx & 0x3FFF);
+	Data = int16_t(rx & 0x3FFF) >> 2;
 	Checksum_K1 = bool(rx & 0x8000);
 	Checksum_K2 = bool(rx & 0x4000);
     Serial.print(Data);
 
-    Data += -8244; //setting offset to center at 0
-    Data /= 16;
+    Data += -2484; //setting offset to center at 0
+    Data = float(Data)/3.0;
+    //Data *= 360.0/90.0; //scaling to degrees
 
     Serial.print(" : "); Serial.print(Data);
     Data = constrain(Data, -127, 127);
