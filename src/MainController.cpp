@@ -46,10 +46,12 @@ ControllerData MainController::getControllerData()
 uint8_t* MainController::getControllerStatus()
 {
 	uint32_t timestamp = millis();
-	ControllerStatus[0] = timestamp >> 24 & 0xFF;
-	ControllerStatus[1] = timestamp >> 16 & 0xFF;
-	ControllerStatus[2] = timestamp >> 8 & 0xFF;
-	ControllerStatus[3] = timestamp & 0xFF;
+    ControllerStatus[0] = 0;
+    ControllerStatus[1] = 0;
+	ControllerStatus[2] = timestamp >> 24 & 0xFF;
+	ControllerStatus[3] = timestamp >> 16 & 0xFF;
+	ControllerStatus[4] = timestamp >> 8 & 0xFF;
+	ControllerStatus[5] = timestamp & 0xFF;
 
 	return ControllerStatus;
 }
